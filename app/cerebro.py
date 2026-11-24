@@ -116,6 +116,17 @@ async def _executar_processo(args: list[str], entrada: str, env: dict, cwd: str,
     return proc.returncode, saida.decode("utf-8", "replace"), erro.decode("utf-8", "replace")
 
 
+def _mensagem_de_erro(saida: str, erro: str) -> str:
+    """Texto curto do erro: o campo 'result' do JSON do Claude Code, ou o inicio da saida."""
+    try:
+        dados = json.loads(saida)
+        if isinstance(dados, dict) and dados.get("result"):
+            return str(dados["result"])[:200].strip()
+    except ValueError:
+        pass
+    return (saida or erro)[:200].strip()
+
+
 def token_configurado() -> bool:
     return bool(os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "").strip())
 
@@ -164,7 +175,7 @@ class Cerebro:
         except FileNotFoundError:
             return {"ok": False, "erro": "comando claude nao encontrado"}
         if codigo != 0:
-            return {"ok": False, "codigo": codigo, "erro": (saida or erro)[:200].strip()}
+            return {"ok": False, "codigo": codigo, "erro": _mensagem_de_erro(saida, erro)}
         try:
             dados = json.loads(saida)
         except ValueError:
@@ -190,8 +201,8 @@ class Cerebro:
                 log.error("comando 'claude' nao encontrado no servidor")
                 return FALHA_TECNICA
         if codigo != 0:
-            # A saida pode trazer o motivo (ex.: autenticacao). Nunca registra a conversa, so o inicio.
-            log.error("Claude Code falhou (codigo %s): %s %s", codigo, saida[:300].strip(), erro[:300].strip())
+            # A saida traz o motivo (ex.: autenticacao). Registra so a mensagem de erro, nunca a conversa.
+            log.error("Claude Code falhou (codigo %s): %s", codigo, _mensagem_de_erro(saida, erro))
             return FALHA_TECNICA
         try:
             dados = json.loads(saida)

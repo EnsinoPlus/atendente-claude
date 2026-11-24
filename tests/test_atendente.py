@@ -332,6 +332,11 @@ class Autoteste(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(r["ok"])
             self.assertNotIn("token-de-teste", json.dumps(r))
 
+    async def test_erro_do_claude_mostra_o_campo_result_do_json(self):
+        saida = json.dumps({"type": "result", "is_error": True, "result": "Invalid API key", "usage": {"x": 1}})
+        r = await self.cerebro(ExecutorFalso((1, saida, ""))).testar()
+        self.assertEqual(r, {"ok": False, "codigo": 1, "erro": "Invalid API key"})
+
     async def test_chatwoot_perfil_devolve_o_nome_do_dono_do_token(self):
         def responde(req):
             self.assertEqual(str(req.url), "https://cw/api/v1/profile")
