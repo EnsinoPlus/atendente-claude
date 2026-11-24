@@ -16,6 +16,10 @@ ENV PATH="/home/atendente/.local/bin:${PATH}"
 RUN curl -fsSL https://claude.ai/install.sh | bash -s stable \
     && claude --version
 
+# Sem este arquivo, numa maquina nova o Claude Code ignora o CLAUDE_CODE_OAUTH_TOKEN e pede /login
+# (relato publico: github.com/anthropics/claude-code/issues/73403).
+RUN echo '{"hasCompletedOnboarding": true}' > /home/atendente/.claude.json
+
 # Depois de instalado: sem atualizacao automatica nem trafego nao essencial dentro do container.
 ENV DISABLE_UPDATES=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \

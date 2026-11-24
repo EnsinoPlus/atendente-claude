@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -160,8 +161,44 @@ class Cerebro:
             "--model", self.cfg.modelo,
         ]
 
+    @staticmethod
+    def _formato_token() -> dict:
+        """So sim/nao e tamanho: ajuda a achar token colado errado sem mostrar nenhum caractere dele."""
+        bruto = os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+        token = bruto.strip()
+        return {
+            "tamanho": len(token),
+            "prefixo_sk_ant_oat01": token.startswith("sk-ant-oat01-"),
+            "tem_espaco_ou_quebra_de_linha": bool(re.search(r"\s", token)),
+            "tem_aspas": any(c in bruto for c in "\"'"),
+            "so_ascii": bruto.isascii(),
+        }
+
+    async def _auth_status(self) -> dict:
+        """`claude auth status`: o Claude Code reconhece o token como login? (so campos seguros)"""
+        try:
+            codigo, saida, erro = await self.executar(
+                ["claude", "auth", "status"], "", self._ambiente(), self._pasta, 30
+            )
+        except (asyncio.TimeoutError, OSError) as e:
+            return {"erro": type(e).__name__}
+        try:
+            dados = json.loads(saida)
+            if isinstance(dados, dict):
+                return {k: dados.get(k) for k in ("loggedIn", "authMethod", "apiProvider")}
+        except ValueError:
+            pass
+        return {"codigo": codigo, "texto": (saida or erro)[:120].strip()}
+
     async def testar(self) -> dict:
         """Autoteste do login do Claude Code: uma pergunta minima, sem conversa de cliente."""
+        resultado = await self._chamada_de_teste()
+        resultado["token"] = self._formato_token()
+        if token_configurado():
+            resultado["auth_status"] = await self._auth_status()
+        return resultado
+
+    async def _chamada_de_teste(self) -> dict:
         if not token_configurado():
             return {"ok": False, "erro": "CLAUDE_CODE_OAUTH_TOKEN nao configurado"}
         args = [

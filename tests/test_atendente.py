@@ -320,8 +320,30 @@ class Autoteste(unittest.IsolatedAsyncioTestCase):
     async def test_claude_ok(self):
         ex = ExecutorFalso(envelope("ok"))
         r = await self.cerebro(ex).testar()
-        self.assertEqual(r, {"ok": True, "resposta": "ok"})
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["resposta"], "ok")
         self.assertEqual(ex.chamadas[0]["args"][ex.chamadas[0]["args"].index("--tools") + 1], "")
+        self.assertEqual(ex.chamadas[1]["args"], ["claude", "auth", "status"])
+
+    async def test_formato_do_token_so_mostra_sim_ou_nao_e_tamanho(self):
+        import os
+        from unittest import mock
+        casos = {
+            "sk-ant-oat01-" + "a" * 90: (103, True, False),
+            "sk-ant-oat01-abc\ndef": (20, True, True),
+            "qualquer-coisa": (14, False, False),
+        }
+        for valor, (tam, prefixo, quebra) in casos.items():
+            with mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": valor}):
+                r = await self.cerebro(ExecutorFalso(envelope("ok"))).testar()
+            f = r["token"]
+            self.assertEqual((f["tamanho"], f["prefixo_sk_ant_oat01"], f["tem_espaco_ou_quebra_de_linha"]), (tam, prefixo, quebra))
+            self.assertNotIn(valor, json.dumps(r))
+
+    async def test_auth_status_mostra_so_campos_seguros(self):
+        saida = json.dumps({"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty", "email": "x@y"})
+        r = await self.cerebro(ExecutorFalso((0, saida, ""))).testar()
+        self.assertEqual(r["auth_status"], {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"})
 
     async def test_claude_falhas_viram_ok_falso_sem_expor_o_token(self):
         casos = [ExecutorFalso((1, "Invalid bearer token", "")), ExecutorFalso((0, "texto", "")),
@@ -335,7 +357,8 @@ class Autoteste(unittest.IsolatedAsyncioTestCase):
     async def test_erro_do_claude_mostra_o_campo_result_do_json(self):
         saida = json.dumps({"type": "result", "is_error": True, "result": "Invalid API key", "usage": {"x": 1}})
         r = await self.cerebro(ExecutorFalso((1, saida, ""))).testar()
-        self.assertEqual(r, {"ok": False, "codigo": 1, "erro": "Invalid API key"})
+        self.assertFalse(r["ok"])
+        self.assertEqual((r["codigo"], r["erro"]), (1, "Invalid API key"))
 
     async def test_chatwoot_perfil_devolve_o_nome_do_dono_do_token(self):
         def responde(req):
