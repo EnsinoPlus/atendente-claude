@@ -7,8 +7,11 @@ Recebe as mensagens novas dos clientes no Chatwoot, consulta o Claude com a base
 - **modo `automatico`**: responde direto ao cliente. Não responde em conversas atribuídas a um atendente humano.
 - **modo `desligado`**: recebe os eventos e não faz nada (interruptor de emergência).
 
-Quando o caso precisa de uma pessoa (desconto, pagamento, erro de cálculo, assunto fora da base etc.),
-deixa uma nota interna com o motivo e, no modo automático, avisa o cliente e deixa a conversa aberta para a equipe.
+**Regra principal:** o robô só responde o que está escrito na base de conhecimento ou na lista oficial de preços.
+Na menor dúvida, transfere. No modo automático, a transferência envia ao cliente uma **mensagem fixa**
+(nunca escrita pelo modelo): "Para te dar uma resposta com total segurança, vou transferir seu atendimento para o
+atendente Almir Sousa. Só um instante, por favor." Depois deixa nota interna com o motivo, atribui a conversa ao
+Almir (se `ATENDENTE_HUMANO_ID` estiver preenchido), deixa a conversa aberta e não volta a falar nela.
 
 ## Como funciona
 

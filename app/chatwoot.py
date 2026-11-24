@@ -60,6 +60,9 @@ class Chatwoot:
             json={"content": texto, "message_type": "outgoing", "private": privada},
         )
 
+    async def atribuir(self, conversa_id: int, agente_id: int) -> None:
+        await self._chamar("POST", f"/conversations/{conversa_id}/assignments", json={"assignee_id": agente_id})
+
     async def abrir_para_equipe(self, conversa_id: int) -> None:
         """Garante que a conversa fique 'aberta' (visivel na fila da equipe)."""
         await self._chamar("POST", f"/conversations/{conversa_id}/toggle_status", json={"status": "open"})

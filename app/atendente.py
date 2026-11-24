@@ -91,6 +91,10 @@ class Atendente:
         mensagens = await self.chatwoot.mensagens(conversa_id, self.cfg.historico_max_mensagens)
         if not mensagens or mensagens[-1].autor != "cliente":
             return None  # alguem ja respondeu durante a espera
+        if self.cfg.modo == "automatico" and any(
+            m.autor == "nota_interna" and m.texto.startswith(PREFIXO_HUMANO) for m in mensagens
+        ):
+            return None  # conversa ja transferida para a equipe: o robo nao volta a falar
         if not self._dentro_do_limite(conversa_id):
             log.warning("conversa %s atingiu o limite de respostas por hora", conversa_id)
             return None
@@ -102,18 +106,24 @@ class Atendente:
     async def publicar(self, conversa_id: int, d: Decisao) -> None:
         if d.acao == "nao_responder":
             return
+        if d.acao == "responder" and not d.resposta:
+            # Resposta vazia nao e uma resposta: na duvida, transfere.
+            d = Decisao("passar_para_humano", "", d.motivo or "Resposta automática vazia.")
         if self.cfg.modo == "sugestao":
             if d.acao == "passar_para_humano":
-                nota = PREFIXO_HUMANO + (d.motivo or "não informado")
-                if d.resposta:
-                    nota += "\n\nSugestão de mensagem ao cliente:\n" + d.resposta
+                nota = (PREFIXO_HUMANO + (d.motivo or "não informado")
+                        + "\n\nSugestão de mensagem ao cliente:\n" + self.cfg.mensagem_transferencia)
             else:
                 nota = PREFIXO_SUGESTAO + d.resposta
             await self.chatwoot.enviar(conversa_id, nota, privada=True)
             return
         # modo automatico
-        if d.resposta:
+        if d.acao == "responder":
             await self.chatwoot.enviar(conversa_id, d.resposta, privada=False)
-        if d.acao == "passar_para_humano":
-            await self.chatwoot.enviar(conversa_id, PREFIXO_HUMANO + (d.motivo or "não informado"), privada=True)
-            await self.chatwoot.abrir_para_equipe(conversa_id)
+            return
+        # passar_para_humano: mensagem fixa (nunca texto do modelo), nota, atribuicao e fila aberta
+        await self.chatwoot.enviar(conversa_id, self.cfg.mensagem_transferencia, privada=False)
+        await self.chatwoot.enviar(conversa_id, PREFIXO_HUMANO + (d.motivo or "não informado"), privada=True)
+        if self.cfg.atendente_humano_id:
+            await self.chatwoot.atribuir(conversa_id, self.cfg.atendente_humano_id)
+        await self.chatwoot.abrir_para_equipe(conversa_id)

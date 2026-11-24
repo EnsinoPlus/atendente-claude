@@ -4,6 +4,12 @@ import os
 from dataclasses import dataclass, field
 
 
+MENSAGEM_TRANSFERENCIA = (
+    "Para te dar uma resposta com total segurança, vou transferir seu atendimento "
+    "para o atendente Almir Sousa. Só um instante, por favor."
+)
+
+
 def _lista_int(valor: str) -> frozenset[int]:
     itens = [v.strip() for v in (valor or "").split(",") if v.strip()]
     return frozenset(int(v) for v in itens)
@@ -37,6 +43,11 @@ class Config:
     planos_url: str = "https://assinaturas.ensinoplus.com.br/api/public/mcp/plans"
     suporte_whatsapp: str = "https://wa.me/5585996641461"
 
+    # Mensagem fixa enviada ao cliente quando o robo nao tem certeza e transfere.
+    mensagem_transferencia: str = MENSAGEM_TRANSFERENCIA
+    # Id do agente "Almir Sousa" no Chatwoot. Se preenchido, a conversa e atribuida a ele ao transferir.
+    atendente_humano_id: int | None = None
+
 
 def carregar() -> Config:
     modo = os.getenv("MODO", "sugestao").strip().lower()
@@ -56,4 +67,6 @@ def carregar() -> Config:
         historico_max_mensagens=int(os.getenv("HISTORICO_MAX_MENSAGENS", "40")),
         planos_url=os.getenv("PLANOS_URL", "https://assinaturas.ensinoplus.com.br/api/public/mcp/plans"),
         suporte_whatsapp=os.getenv("SUPORTE_WHATSAPP", "https://wa.me/5585996641461"),
+        mensagem_transferencia=os.getenv("MENSAGEM_TRANSFERENCIA", MENSAGEM_TRANSFERENCIA),
+        atendente_humano_id=int(os.getenv("ATENDENTE_HUMANO_ID")) if os.getenv("ATENDENTE_HUMANO_ID") else None,
     )

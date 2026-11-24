@@ -9,7 +9,7 @@ import httpx
 from app.atendente import PREFIXO_HUMANO, PREFIXO_SUGESTAO, Atendente, evento_relevante
 from app.cerebro import Decisao, interpretar, montar_entrada
 from app.chatwoot import Chatwoot, Mensagem
-from app.config import Config
+from app.config import MENSAGEM_TRANSFERENCIA, Config
 from app.planos import Planos, formatar
 
 PLANOS_JSON = {
@@ -48,7 +48,11 @@ class ChatwootFalso:
         self.lista = mensagens
         self.enviadas: list[tuple[int, str, bool]] = []
         self.abertas: list[int] = []
+        self.atribuidas: list[tuple[int, int]] = []
         self.lidas = 0
+
+    async def atribuir(self, conversa_id, agente_id):
+        self.atribuidas.append((conversa_id, agente_id))
 
     async def mensagens(self, conversa_id, limite):
         self.lidas += 1
@@ -106,20 +110,43 @@ class Publicacao(unittest.IsolatedAsyncioTestCase):
         await a.atender(1)
         self.assertEqual(a.chatwoot.enviadas, [(1, "Olá!", False)])
 
-    async def test_passar_para_humano_no_automatico(self):
-        d = Decisao("passar_para_humano", "Vou chamar alguém da equipe.", "pediu desconto")
-        a = atendente(cfg(modo="automatico"), [Mensagem("cliente", "Tem desconto?")], d)
+    async def test_transferencia_no_automatico_usa_mensagem_fixa_e_atribui_ao_almir(self):
+        d = Decisao("passar_para_humano", "texto inventado pelo modelo", "pediu desconto")
+        a = atendente(cfg(modo="automatico", atendente_humano_id=3), [Mensagem("cliente", "Tem desconto?")], d)
         await a.atender(7)
-        self.assertEqual(a.chatwoot.enviadas[0], (7, "Vou chamar alguém da equipe.", False))
+        self.assertEqual(a.chatwoot.enviadas[0], (7, MENSAGEM_TRANSFERENCIA, False))
+        self.assertIn("Almir Sousa", a.chatwoot.enviadas[0][1])
         self.assertEqual(a.chatwoot.enviadas[1], (7, PREFIXO_HUMANO + "pediu desconto", True))
+        self.assertEqual(a.chatwoot.atribuidas, [(7, 3)])
         self.assertEqual(a.chatwoot.abertas, [7])
 
-    async def test_passar_para_humano_no_modo_sugestao_nao_fala_com_cliente(self):
-        d = Decisao("passar_para_humano", "Vou chamar alguém.", "problema de pagamento")
+    async def test_transferencia_sem_id_do_almir_nao_atribui(self):
+        d = Decisao("passar_para_humano", "", "dúvida fora da base")
+        a = atendente(cfg(modo="automatico"), [Mensagem("cliente", "Vocês têm curso presencial?")], d)
+        await a.atender(7)
+        self.assertEqual(a.chatwoot.atribuidas, [])
+        self.assertEqual(a.chatwoot.abertas, [7])
+
+    async def test_robo_nao_volta_a_falar_em_conversa_transferida(self):
+        msgs = [Mensagem("cliente", "Tem desconto?"), Mensagem("equipe", MENSAGEM_TRANSFERENCIA),
+                Mensagem("nota_interna", PREFIXO_HUMANO + "pediu desconto"), Mensagem("cliente", "Alô?")]
+        a = atendente(cfg(modo="automatico"), msgs)
+        self.assertIsNone(await a.atender(7))
+        self.assertEqual(a.cerebro.chamadas, 0)
+
+    async def test_resposta_vazia_vira_transferencia(self):
+        a = atendente(cfg(modo="automatico"), [Mensagem("cliente", "Oi")], Decisao("responder", "", "?"))
+        await a.atender(7)
+        self.assertEqual(a.chatwoot.enviadas[0], (7, MENSAGEM_TRANSFERENCIA, False))
+
+    async def test_transferencia_no_modo_sugestao_nao_fala_com_cliente(self):
+        d = Decisao("passar_para_humano", "", "problema de pagamento")
         a = atendente(cfg(), [Mensagem("cliente", "Fui cobrado duas vezes")], d)
         await a.atender(7)
         self.assertEqual(len(a.chatwoot.enviadas), 1)
-        self.assertTrue(a.chatwoot.enviadas[0][2])
+        cid, nota, privada = a.chatwoot.enviadas[0]
+        self.assertTrue(privada)
+        self.assertIn(MENSAGEM_TRANSFERENCIA, nota)
         self.assertEqual(a.chatwoot.abertas, [])
 
     async def test_nao_responde_se_equipe_ja_respondeu(self):
@@ -170,6 +197,11 @@ class Cerebro(unittest.TestCase):
     def test_saida_invalida_vira_passar_para_humano(self):
         self.assertEqual(interpretar("não é json").acao, "passar_para_humano")
         self.assertEqual(interpretar(json.dumps({"acao": "vender"})).acao, "passar_para_humano")
+
+    def test_base_de_conhecimento_exige_certeza_e_transfere_para_almir(self):
+        from app.cerebro import CONHECIMENTO
+        self.assertIn("100% de certeza", CONHECIMENTO)
+        self.assertIn("Almir Sousa", CONHECIMENTO)
 
     def test_entrada_sem_planos_proibe_citar_valor(self):
         texto = montar_entrada([Mensagem("cliente", "Quanto custa?")], None)
