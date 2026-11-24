@@ -128,8 +128,14 @@ def _mensagem_de_erro(saida: str, erro: str) -> str:
     return (saida or erro)[:200].strip()
 
 
+def token_limpo() -> str:
+    """Token sem espacos nem quebras de linha. O terminal quebra o token do `setup-token` em duas linhas e,
+    ao copiar, a quebra vai junto; o token real nao tem nenhum espaco, entao remover so ajuda."""
+    return re.sub(r"\s+", "", os.getenv("CLAUDE_CODE_OAUTH_TOKEN", ""))
+
+
 def token_configurado() -> bool:
-    return bool(os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "").strip())
+    return bool(token_limpo())
 
 
 def claude_instalado() -> bool:
@@ -146,6 +152,8 @@ class Cerebro:
 
     def _ambiente(self) -> dict:
         env = {k: v for k, v in os.environ.items() if k not in _VARIAVEIS_REMOVIDAS}
+        if token_configurado():
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token_limpo()
         env["DISABLE_UPDATES"] = "1"
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1"
@@ -168,6 +176,7 @@ class Cerebro:
         token = bruto.strip()
         return {
             "tamanho": len(token),
+            "tamanho_sem_espacos": len(token_limpo()),
             "prefixo_sk_ant_oat01": token.startswith("sk-ant-oat01-"),
             "tem_espaco_ou_quebra_de_linha": bool(re.search(r"\s", token)),
             "tem_aspas": any(c in bruto for c in "\"'"),

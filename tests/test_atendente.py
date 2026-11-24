@@ -340,6 +340,17 @@ class Autoteste(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((f["tamanho"], f["prefixo_sk_ant_oat01"], f["tem_espaco_ou_quebra_de_linha"]), (tam, prefixo, quebra))
             self.assertNotIn(valor, json.dumps(r))
 
+    async def test_token_com_quebra_de_linha_no_meio_e_limpo_antes_de_usar(self):
+        import os
+        from unittest import mock
+        ex = ExecutorFalso(envelope('{"acao": "nao_responder", "resposta": "", "motivo": "x"}'))
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-abc\r\n  def\n"}):
+            await self.cerebro(ex).decidir([Mensagem("cliente", "Oi")], None)
+            r = await self.cerebro(ExecutorFalso(envelope("ok"))).testar()
+        self.assertEqual(ex.chamadas[0]["env"]["CLAUDE_CODE_OAUTH_TOKEN"], "sk-ant-oat01-abcdef")
+        self.assertEqual(r["token"]["tamanho_sem_espacos"], 19)
+        self.assertTrue(r["token"]["tem_espaco_ou_quebra_de_linha"])
+
     async def test_auth_status_mostra_so_campos_seguros(self):
         saida = json.dumps({"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty", "email": "x@y"})
         r = await self.cerebro(ExecutorFalso((0, saida, ""))).testar()
