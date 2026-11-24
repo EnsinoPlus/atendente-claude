@@ -1,0 +1,59 @@
+# Atendente virtual Ensino Plus (Chatwoot + Claude)
+
+Recebe as mensagens novas dos clientes no Chatwoot, consulta o Claude com a base de conhecimento
+(`conhecimento/atendimento.md`) e os preços oficiais do momento, e:
+
+- **modo `sugestao`** (padrão): escreve a resposta como **nota interna**. O cliente não vê; um atendente revisa e envia.
+- **modo `automatico`**: responde direto ao cliente. Não responde em conversas atribuídas a um atendente humano.
+- **modo `desligado`**: recebe os eventos e não faz nada (interruptor de emergência).
+
+Quando o caso precisa de uma pessoa (desconto, pagamento, erro de cálculo, assunto fora da base etc.),
+deixa uma nota interna com o motivo e, no modo automático, avisa o cliente e deixa a conversa aberta para a equipe.
+
+## Como funciona
+
+1. O Chatwoot chama `POST /webhooks/chatwoot/<WEBHOOK_SEGREDO>` a cada mensagem criada.
+2. Só conta mensagem **do cliente**, **não privada**, numa caixa de `CHATWOOT_INBOX_IDS`, em conversa não resolvida.
+3. Espera `ESPERA_SEGUNDOS` (20 s) sem mensagem nova do cliente, para juntar mensagens seguidas numa resposta só.
+4. Relê a conversa. Se a última mensagem já não for do cliente (alguém respondeu), não faz nada.
+5. Consulta os preços em `https://assinaturas.ensinoplus.com.br/api/public/mcp/plans` (cache de 10 min).
+   Se não conseguir, o robô é proibido de citar valores e manda o link de planos.
+6. Chama o Claude (`claude-opus-5-5`, esforço `low`, saída em JSON) e publica conforme o modo.
+7. Limite de `MAX_RESPOSTAS_POR_HORA` (8) por conversa, contra loops.
+
+## Publicar no Easypanel
+
+1. **Chave da API**: crie em https://console.anthropic.com (cobrança por uso, separada da assinatura do Claude).
+2. **Agente no Chatwoot**: crie um agente chamado "Atendente virtual", entre com ele e copie o
+   *Token de acesso* (Perfil). Adicione esse agente à caixa Waha (Caixas de entrada > waha > Agentes).
+3. **App no Easypanel**: projeto `ensinoplus` > + Serviço > App
+   - Fonte: GitHub `EnsinoPlus/atendente-claude`, branch `main`, build por **Dockerfile**.
+   - Porta: `8000`.
+   - Ambiente: copie `.env.example` e preencha (`ANTHROPIC_API_KEY`, `CHATWOOT_API_TOKEN`, `WEBHOOK_SEGREDO`).
+     `CHATWOOT_URL=http://ensinoplus_chatwoot:3000` usa a rede interna do Easypanel.
+   - Domínio: o Easypanel gera um `*.n697dr.easypanel.host`; pode usar esse.
+   - Recursos: 1 processo só (o Dockerfile já usa `--workers 1`). Consumo baixo: espera rede, não CPU.
+4. Confira `https://<dominio>/saude` → `{"ok": true, "modo": "sugestao", "caixas": [11]}`.
+5. **Webhook no Chatwoot**: Configurações > Integrações > Webhooks > Adicionar
+   - URL: `https://<dominio>/webhooks/chatwoot/<WEBHOOK_SEGREDO>`
+   - Evento: **Mensagem criada** (só esse).
+6. Mande uma mensagem de teste pelo WhatsApp e veja a nota interna aparecer na conversa (~20 s).
+
+## Ligar o modo automático (só depois de alguns dias de sugestões boas)
+
+Troque `MODO=automatico` no Easypanel e reimplante. Para parar na hora: `MODO=desligado`.
+
+## Testes
+
+```
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m unittest discover -s tests -t .
+```
+
+Os testes não chamam o Claude nem o Chatwoot (usam dublês).
+
+## Atualizar o que o robô sabe
+
+Edite `conhecimento/atendimento.md` e reimplante. Preços **não** vão nesse arquivo: vêm da lista oficial.
+Regra do arquivo: o robô só afirma o que está escrito ali ou na lista de preços; o resto vai para um humano.
