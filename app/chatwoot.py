@@ -20,9 +20,23 @@ class Mensagem:
 
 class Chatwoot:
     def __init__(self, url: str, conta: int, token: str, http: httpx.AsyncClient | None = None):
-        self.base = f"{url}/api/v1/accounts/{conta}"
+        self.raiz = f"{url}/api/v1"
+        self.base = f"{self.raiz}/accounts/{conta}"
         self.token = token
         self.http = http or httpx.AsyncClient(timeout=20)
+
+    async def perfil(self) -> dict:
+        """Autoteste do token: quem e o dono dele no Chatwoot. Nunca devolve o token."""
+        try:
+            resp = await self.http.get(f"{self.raiz}/profile", headers={"api_access_token": self.token})
+        except httpx.HTTPError as e:
+            return {"ok": False, "erro": f"sem conexao com o Chatwoot: {type(e).__name__}"}
+        if resp.status_code != 200:
+            return {"ok": False, "http": resp.status_code}
+        try:
+            return {"ok": True, "http": 200, "nome": resp.json().get("name")}
+        except ValueError:
+            return {"ok": False, "http": 200, "erro": "resposta que nao e JSON"}
 
     async def _chamar(self, metodo: str, caminho: str, **kw) -> dict:
         resp = await self.http.request(

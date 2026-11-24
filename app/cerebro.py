@@ -149,6 +149,30 @@ class Cerebro:
             "--model", self.cfg.modelo,
         ]
 
+    async def testar(self) -> dict:
+        """Autoteste do login do Claude Code: uma pergunta minima, sem conversa de cliente."""
+        if not token_configurado():
+            return {"ok": False, "erro": "CLAUDE_CODE_OAUTH_TOKEN nao configurado"}
+        args = [
+            "claude", "-p", "Responda somente com a palavra: ok",
+            "--output-format", "json", "--tools", "", "--no-session-persistence", "--model", self.cfg.modelo,
+        ]
+        try:
+            codigo, saida, erro = await self.executar(args, "", self._ambiente(), self._pasta, 60)
+        except asyncio.TimeoutError:
+            return {"ok": False, "erro": "demorou mais de 60 s"}
+        except FileNotFoundError:
+            return {"ok": False, "erro": "comando claude nao encontrado"}
+        if codigo != 0:
+            return {"ok": False, "codigo": codigo, "erro": (saida or erro)[:200].strip()}
+        try:
+            dados = json.loads(saida)
+        except ValueError:
+            return {"ok": False, "erro": "saida que nao e JSON: " + saida[:200].strip()}
+        if not isinstance(dados, dict) or dados.get("is_error"):
+            return {"ok": False, "erro": str(dados.get("result") if isinstance(dados, dict) else dados)[:200]}
+        return {"ok": True, "resposta": str(dados.get("result"))[:100]}
+
     async def decidir(self, mensagens: list[Mensagem], planos: str | None) -> Decisao:
         if not token_configurado():
             log.error("CLAUDE_CODE_OAUTH_TOKEN nao configurado: nao consigo consultar a IA")

@@ -305,6 +305,52 @@ class CerebroClaudeCode(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(d.resposta, "")
 
 
+class Autoteste(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        import os
+        from unittest import mock
+        patcher = mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": "token-de-teste"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def cerebro(self, executor):
+        from app.cerebro import Cerebro as CerebroReal
+        return CerebroReal(cfg(modelo="sonnet"), executar=executor)
+
+    async def test_claude_ok(self):
+        ex = ExecutorFalso(envelope("ok"))
+        r = await self.cerebro(ex).testar()
+        self.assertEqual(r, {"ok": True, "resposta": "ok"})
+        self.assertEqual(ex.chamadas[0]["args"][ex.chamadas[0]["args"].index("--tools") + 1], "")
+
+    async def test_claude_falhas_viram_ok_falso_sem_expor_o_token(self):
+        casos = [ExecutorFalso((1, "Invalid bearer token", "")), ExecutorFalso((0, "texto", "")),
+                 ExecutorFalso(envelope("erro", is_error=True)), ExecutorFalso(erro=asyncio.TimeoutError()),
+                 ExecutorFalso(erro=FileNotFoundError())]
+        for ex in casos:
+            r = await self.cerebro(ex).testar()
+            self.assertFalse(r["ok"])
+            self.assertNotIn("token-de-teste", json.dumps(r))
+
+    async def test_chatwoot_perfil_devolve_o_nome_do_dono_do_token(self):
+        def responde(req):
+            self.assertEqual(str(req.url), "https://cw/api/v1/profile")
+            return httpx.Response(200, json={"name": "Atendente EnsinoPlus", "access_token": "nao-deve-sair"})
+        c = Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(transport=httpx.MockTransport(responde)))
+        r = await c.perfil()
+        self.assertEqual(r, {"ok": True, "http": 200, "nome": "Atendente EnsinoPlus"})
+
+    async def test_chatwoot_perfil_token_invalido(self):
+        c = Chatwoot("https://cw", 1, "ruim", http=httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(401))))
+        self.assertEqual(await c.perfil(), {"ok": False, "http": 401})
+
+    async def test_chatwoot_perfil_sem_conexao(self):
+        def falha(req):
+            raise httpx.ConnectError("sem rede")
+        c = Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(transport=httpx.MockTransport(falha)))
+        self.assertFalse((await c.perfil())["ok"])
+
+
 class PlanosTeste(unittest.IsolatedAsyncioTestCase):
     def test_formata_precos_em_reais(self):
         t = formatar(PLANOS_JSON)

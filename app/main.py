@@ -32,22 +32,41 @@ def atendente() -> Atendente:
     return _atendente
 
 
+def segredo_valido(segredo: str) -> bool:
+    """Compara em tempo constante (o Chatwoot nao assina o corpo do webhook)."""
+    return bool(CFG.webhook_segredo) and hmac.compare_digest(segredo.encode(), CFG.webhook_segredo.encode())
+
+
 @app.get("/saude")
 async def saude() -> dict:
-    # Nao mostra nenhum valor secreto: so se o Claude Code esta instalado e se o token foi configurado.
+    # Nunca mostra valores secretos. Os tamanhos ajudam a ver se um valor foi colado no lugar errado:
+    # o segredo do webhook gerado tem 40 caracteres e e bem menor que os tokens.
     return {
         "ok": True,
         "modo": CFG.modo,
         "caixas": sorted(CFG.inbox_ids),
         "claude_instalado": claude_instalado(),
         "token_configurado": token_configurado(),
+        "tamanhos": {
+            "webhook_segredo": len(CFG.webhook_segredo),
+            "chatwoot_token": len(CFG.chatwoot_api_token),
+            "claude_token": len(os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "").strip()),
+        },
     }
+
+
+@app.get("/diagnostico/{segredo}", response_model=None)
+async def diagnostico(segredo: str):
+    """Autoteste protegido pelo segredo do webhook: o token do Chatwoot e o login do Claude Code funcionam?"""
+    if not segredo_valido(segredo):
+        return Response(status_code=403)
+    a = atendente()
+    return {"chatwoot": await a.chatwoot.perfil(), "claude": await a.cerebro.testar()}
 
 
 @app.post("/webhooks/chatwoot/{segredo}")
 async def webhook(segredo: str, request: Request) -> Response:
-    # Segredo no caminho, comparado em tempo constante (o Chatwoot nao assina o corpo).
-    if not CFG.webhook_segredo or not hmac.compare_digest(segredo, CFG.webhook_segredo):
+    if not segredo_valido(segredo):
         return Response(status_code=403)
     try:
         ev = await request.json()
