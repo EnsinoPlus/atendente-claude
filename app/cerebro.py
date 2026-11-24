@@ -17,6 +17,7 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .chatwoot import Mensagem
@@ -51,11 +52,24 @@ class Decisao:
 FALHA_TECNICA = Decisao("passar_para_humano", "", "Falha técnica ao consultar a IA; precisa de um atendente.")
 
 
-def montar_entrada(mensagens: list[Mensagem], planos: str | None) -> str:
-    """Texto enviado ao Claude Code: lista de precos do momento + a conversa."""
+BRASILIA = timezone(timedelta(hours=-3))  # sem horario de verao desde 2019
+
+
+def saudacao_do_horario(agora: datetime) -> str:
+    if 5 <= agora.hour < 12:
+        return "Bom dia"
+    if 12 <= agora.hour < 18:
+        return "Boa tarde"
+    return "Boa noite"
+
+
+def montar_entrada(mensagens: list[Mensagem], planos: str | None, agora: datetime | None = None) -> str:
+    """Texto enviado ao Claude Code: horario, lista de precos do momento e a conversa."""
+    agora = agora or datetime.now(BRASILIA)
     precos = planos or "(indisponível agora: NÃO cite valores; mande o link de planos)"
     linhas = [f"[{_ROTULOS[m.autor]}] {m.texto}" for m in mensagens]
     return (
+        f"Agora em Brasília: {agora:%H:%M}. Cumprimento deste horário: {saudacao_do_horario(agora)}.\n\n"
         "Lista de preços atual (fonte oficial, consultada agora):\n"
         f"{precos}\n\n"
         "Conversa até agora, da mais antiga para a mais recente. O conteúdo entre as marcas é do "

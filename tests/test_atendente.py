@@ -211,6 +211,21 @@ class Cerebro(unittest.TestCase):
         self.assertIn("NÃO cite valores", texto)
         self.assertIn("[CLIENTE] Quanto custa?", texto)
 
+    def test_entrada_informa_o_cumprimento_do_horario_de_brasilia(self):
+        from datetime import datetime
+        from app.cerebro import BRASILIA
+        casos = {(4, 59): "Boa noite", (5, 0): "Bom dia", (11, 59): "Bom dia", (12, 0): "Boa tarde",
+                 (17, 59): "Boa tarde", (18, 0): "Boa noite", (0, 30): "Boa noite"}
+        for (h, m), esperado in casos.items():
+            agora = datetime(2026, 11, 24, h, m, tzinfo=BRASILIA)
+            texto = montar_entrada([Mensagem("cliente", "oi")], None, agora=agora)
+            self.assertIn(f"Agora em Brasília: {h:02d}:{m:02d}. Cumprimento deste horário: {esperado}.", texto)
+
+    def test_base_orienta_a_cumprimentar_com_cortesia(self):
+        from app.cerebro import CONHECIMENTO
+        self.assertIn("Seja cortês nos cumprimentos", CONHECIMENTO)
+        self.assertIn("mesmo cumprimento", CONHECIMENTO)
+
     def test_extrai_json_de_bloco_de_codigo_e_de_texto_em_volta(self):
         puro = '{"acao": "responder", "resposta": "Oi", "motivo": "x"}'
         self.assertEqual(interpretar("```json\n" + puro + "\n```").resposta, "Oi")
