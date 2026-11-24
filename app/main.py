@@ -16,7 +16,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(
 log = logging.getLogger("atendente.main")
 
 CFG = config.carregar()
-app = FastAPI(title="Atendente virtual Ensino Plus")
+app = FastAPI(title="Atendente EnsinoPlus")
 _atendente: Atendente | None = None
 
 

@@ -1,4 +1,4 @@
-# Atendente virtual Ensino Plus (Chatwoot + Claude)
+# Atendente EnsinoPlus — atendente virtual da Ensino Plus (Chatwoot + Claude)
 
 Recebe as mensagens novas dos clientes no Chatwoot, consulta o Claude com a base de conhecimento
 (`conhecimento/atendimento.md`) e os preços oficiais do momento, e:

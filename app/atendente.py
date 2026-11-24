@@ -12,8 +12,8 @@ from .planos import Planos
 
 log = logging.getLogger("atendente")
 
-PREFIXO_SUGESTAO = "🤖 Sugestão do atendente virtual (o cliente NÃO viu):\n\n"
-PREFIXO_HUMANO = "🤖 Atendente virtual: este cliente precisa de uma pessoa da equipe.\nMotivo: "
+PREFIXO_SUGESTAO = "🤖 Sugestão do Atendente EnsinoPlus (o cliente NÃO viu):\n\n"
+PREFIXO_HUMANO = "🤖 Atendente EnsinoPlus: este cliente precisa de uma pessoa da equipe.\nMotivo: "
 
 
 def evento_relevante(ev: dict, cfg: Config) -> int | None:

@@ -202,6 +202,8 @@ class Cerebro(unittest.TestCase):
         from app.cerebro import CONHECIMENTO
         self.assertIn("100% de certeza", CONHECIMENTO)
         self.assertIn("Almir Sousa", CONHECIMENTO)
+        self.assertIn("Seu nome é **Atendente EnsinoPlus**", CONHECIMENTO)
+        self.assertIn("Atendente EnsinoPlus", PREFIXO_SUGESTAO)
 
     def test_entrada_sem_planos_proibe_citar_valor(self):
         texto = montar_entrada([Mensagem("cliente", "Quanto custa?")], None)
