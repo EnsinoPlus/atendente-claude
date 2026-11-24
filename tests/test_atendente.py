@@ -210,6 +210,100 @@ class Cerebro(unittest.TestCase):
         self.assertIn("NÃO cite valores", texto)
         self.assertIn("[CLIENTE] Quanto custa?", texto)
 
+    def test_extrai_json_de_bloco_de_codigo_e_de_texto_em_volta(self):
+        puro = '{"acao": "responder", "resposta": "Oi", "motivo": "x"}'
+        self.assertEqual(interpretar("```json\n" + puro + "\n```").resposta, "Oi")
+        self.assertEqual(interpretar("Claro! " + puro + " Pronto.").resposta, "Oi")
+
+    def test_campos_com_tipo_errado_nao_quebram(self):
+        d = interpretar(json.dumps({"acao": "responder", "resposta": 123, "motivo": None}))
+        self.assertEqual((d.acao, d.resposta, d.motivo), ("responder", "", ""))
+
+
+class ExecutorFalso:
+    """Substitui o subprocesso do Claude Code e guarda o que foi pedido."""
+
+    def __init__(self, retorno=None, erro=None):
+        self.retorno, self.erro, self.chamadas = retorno, erro, []
+
+    async def __call__(self, args, entrada, env, cwd, timeout):
+        self.chamadas.append({"args": args, "entrada": entrada, "env": env, "cwd": cwd, "timeout": timeout})
+        if self.erro:
+            raise self.erro
+        return self.retorno
+
+
+def envelope(resultado, **extra):
+    return (0, json.dumps({"type": "result", "result": resultado, **extra}), "")
+
+
+class CerebroClaudeCode(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        import os
+        from unittest import mock
+        self.env = mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": "token-de-teste",
+                                                "ANTHROPIC_API_KEY": "chave-que-nao-deve-passar",
+                                                "ANTHROPIC_AUTH_TOKEN": "outro-que-nao-deve-passar"})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def cerebro(self, executor):
+        from app.cerebro import Cerebro as CerebroReal
+        return CerebroReal(cfg(modelo="sonnet"), executar=executor)
+
+    async def test_responde_quando_o_claude_code_devolve_json_valido(self):
+        ex = ExecutorFalso(envelope('{"acao": "responder", "resposta": "Olá!", "motivo": "saudação"}'))
+        d = await self.cerebro(ex).decidir([Mensagem("cliente", "Oi")], "- plano X")
+        self.assertEqual(d, Decisao("responder", "Olá!", "saudação"))
+
+    async def test_chamada_sem_ferramentas_com_conhecimento_e_conversa_na_entrada(self):
+        ex = ExecutorFalso(envelope('{"acao": "nao_responder", "resposta": "", "motivo": "x"}'))
+        await self.cerebro(ex).decidir([Mensagem("cliente", "Quanto custa?")], "- plano X")
+        [c] = ex.chamadas
+        args = c["args"]
+        self.assertEqual(args[:2], ["claude", "-p"])
+        self.assertEqual(args[args.index("--tools") + 1], "")  # nenhuma ferramenta
+        self.assertIn("--system-prompt-file", args)
+        self.assertIn("--no-session-persistence", args)
+        self.assertEqual(args[args.index("--output-format") + 1], "json")
+        self.assertEqual(args[args.index("--model") + 1], "sonnet")
+        self.assertNotIn("--bare", args)  # --bare nao le o login da assinatura
+        self.assertIn("[CLIENTE] Quanto custa?", c["entrada"])
+        self.assertIn("- plano X", c["entrada"])
+
+    async def test_ambiente_usa_so_o_token_da_assinatura(self):
+        ex = ExecutorFalso(envelope('{"acao": "nao_responder", "resposta": "", "motivo": "x"}'))
+        await self.cerebro(ex).decidir([Mensagem("cliente", "Oi")], None)
+        env = ex.chamadas[0]["env"]
+        self.assertEqual(env["CLAUDE_CODE_OAUTH_TOKEN"], "token-de-teste")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_AUTH_TOKEN", env)
+        self.assertEqual(env["DISABLE_UPDATES"], "1")
+
+    async def test_sem_token_nao_chama_o_claude_e_transfere(self):
+        import os
+        from unittest import mock
+        ex = ExecutorFalso(envelope("{}"))
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": ""}):
+            d = await self.cerebro(ex).decidir([Mensagem("cliente", "Oi")], None)
+        self.assertEqual(d.acao, "passar_para_humano")
+        self.assertEqual(ex.chamadas, [])
+
+    async def test_falhas_viram_transferencia(self):
+        casos = {
+            "codigo diferente de zero": ExecutorFalso((1, "Not logged in", "")),
+            "saida que nao e json": ExecutorFalso((0, "texto solto", "")),
+            "is_error verdadeiro": ExecutorFalso(envelope("erro", is_error=True)),
+            "resultado fora do formato": ExecutorFalso(envelope("Claro, posso ajudar!")),
+            "tempo esgotado": ExecutorFalso(erro=asyncio.TimeoutError()),
+            "claude nao instalado": ExecutorFalso(erro=FileNotFoundError()),
+        }
+        for nome, ex in casos.items():
+            with self.subTest(nome):
+                d = await self.cerebro(ex).decidir([Mensagem("cliente", "Oi")], None)
+                self.assertEqual(d.acao, "passar_para_humano")
+                self.assertEqual(d.resposta, "")
+
 
 class PlanosTeste(unittest.IsolatedAsyncioTestCase):
     def test_formata_precos_em_reais(self):

@@ -244,7 +244,11 @@ escreva em `motivo`, para a equipe, o que o cliente precisa.
 
 ## Formato da sua saída
 
-JSON com:
+Responda **somente** com um objeto JSON, sem nenhum texto antes ou depois e sem bloco de código. Você não tem
+ferramentas: não tente abrir páginas, ler arquivos nem executar nada; responda só com o que está neste texto.
+Exemplo: {"acao": "responder", "resposta": "Olá! Como posso ajudar?", "motivo": "saudação"}
+
+O JSON tem:
 - `acao`: `responder` (enviar `resposta` ao cliente), `passar_para_humano` (transferir para o Almir Sousa) ou
   `nao_responder` (nada a enviar).
 - `resposta`: o texto para o cliente (vazio em `passar_para_humano` e `nao_responder`).

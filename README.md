@@ -21,22 +21,36 @@ Almir (se `ATENDENTE_HUMANO_ID` estiver preenchido), deixa a conversa aberta e n
 4. Relê a conversa. Se a última mensagem já não for do cliente (alguém respondeu), não faz nada.
 5. Consulta os preços em `https://assinaturas.ensinoplus.com.br/api/public/mcp/plans` (cache de 10 min).
    Se não conseguir, o robô é proibido de citar valores e manda o link de planos.
-6. Chama o Claude (`claude-opus-5-5`, esforço `low`, saída em JSON) e publica conforme o modo.
-7. Limite de `MAX_RESPOSTAS_POR_HORA` (8) por conversa, contra loops.
+6. Consulta o **Claude Code** (CLI) em modo texto, **sem nenhuma ferramenta** (`--tools ""`), com a base de
+   conhecimento como prompt de sistema e a conversa pela entrada padrão. Ele entra com o login da assinatura
+   (`CLAUDE_CODE_OAUTH_TOKEN`). A resposta é um JSON; se algo falhar (login, tempo, formato), o robô **transfere
+   para o Almir Sousa** em vez de arriscar.
+7. Limite de `MAX_RESPOSTAS_POR_HORA` (8) por conversa, contra loops. Uma consulta por vez (`CLAUDE_CONCORRENCIA=1`).
+
+> **Aviso sobre o login da assinatura.** A página oficial de termos do Claude Code
+> (https://code.claude.com/docs/en/legal-and-compliance) diz que quem constrói produtos ou serviços deve usar
+> autenticação por chave de API, e que os limites dos planos Pro/Max assumem uso individual. Um robô que atende
+> clientes é um serviço. O uso do login da assinatura aqui foi uma decisão do dono da conta, que assume o risco
+> (por exemplo, bloqueio da conta). Para trocar o "cérebro" por outro (chave de API, 9router), basta reescrever
+> `app/cerebro.py`: o resto do robô não muda.
 
 ## Publicar no Easypanel
 
-1. **Chave da API**: crie em https://console.anthropic.com (cobrança por uso, separada da assinatura do Claude).
-2. **Agente no Chatwoot**: crie um agente chamado "Atendente virtual", entre com ele e copie o
+1. **Token do Claude Code**: num computador com navegador, instale o Claude Code e rode `claude setup-token`;
+   entre com a conta da assinatura. O token aparece no terminal (vale 1 ano). Não defina `ANTHROPIC_API_KEY`
+   neste app: ela teria prioridade sobre o login da assinatura.
+2. **Agente no Chatwoot**: crie um agente chamado "Atendente EnsinoPlus", entre com ele e copie o
    *Token de acesso* (Perfil). Adicione esse agente à caixa Waha (Caixas de entrada > waha > Agentes).
 3. **App no Easypanel**: projeto `ensinoplus` > + Serviço > App
-   - Fonte: GitHub `EnsinoPlus/atendente-claude`, branch `main`, build por **Dockerfile**.
+   - Fonte: GitHub `EnsinoPlus/atendente-claude`, branch `main`, build por **Dockerfile**
+     (instala o Claude Code pelo instalador oficial).
    - Porta: `8000`.
-   - Ambiente: copie `.env.example` e preencha (`ANTHROPIC_API_KEY`, `CHATWOOT_API_TOKEN`, `WEBHOOK_SEGREDO`).
+   - Ambiente: copie `.env.example` e preencha (`CLAUDE_CODE_OAUTH_TOKEN`, `CHATWOOT_API_TOKEN`, `WEBHOOK_SEGREDO`).
      `CHATWOOT_URL=http://ensinoplus_chatwoot:3000` usa a rede interna do Easypanel.
    - Domínio: o Easypanel gera um `*.n697dr.easypanel.host`; pode usar esse.
-   - Recursos: 1 processo só (o Dockerfile já usa `--workers 1`). Consumo baixo: espera rede, não CPU.
-4. Confira `https://<dominio>/saude` → `{"ok": true, "modo": "sugestao", "caixas": [11]}`.
+   - Recursos: 1 processo só (o Dockerfile já usa `--workers 1`); cada consulta abre um processo do Claude Code.
+4. Confira `https://<dominio>/saude` →
+   `{"ok": true, "modo": "sugestao", "caixas": [11], "claude_instalado": true, "token_configurado": true}`.
 5. **Webhook no Chatwoot**: Configurações > Integrações > Webhooks > Adicionar
    - URL: `https://<dominio>/webhooks/chatwoot/<WEBHOOK_SEGREDO>`
    - Evento: **Mensagem criada** (só esse).
@@ -54,7 +68,7 @@ python -m venv .venv
 .venv\Scripts\python -m unittest discover -s tests -t .
 ```
 
-Os testes não chamam o Claude nem o Chatwoot (usam dublês).
+Os testes não chamam o Claude Code nem o Chatwoot (usam dublês).
 
 ## Atualizar o que o robô sabe
 

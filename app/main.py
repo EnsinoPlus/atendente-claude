@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 
 from . import config
 from .atendente import Atendente
-from .cerebro import Cerebro
+from .cerebro import Cerebro, claude_instalado, token_configurado
 from .chatwoot import Chatwoot
 from .planos import Planos
 
@@ -26,7 +26,7 @@ def atendente() -> Atendente:
         _atendente = Atendente(
             CFG,
             Chatwoot(CFG.chatwoot_url, CFG.chatwoot_account_id, CFG.chatwoot_api_token),
-            Cerebro(CFG.modelo, CFG.esforco),
+            Cerebro(CFG),
             Planos(CFG.planos_url),
         )
     return _atendente
@@ -34,7 +34,14 @@ def atendente() -> Atendente:
 
 @app.get("/saude")
 async def saude() -> dict:
-    return {"ok": True, "modo": CFG.modo, "caixas": sorted(CFG.inbox_ids)}
+    # Nao mostra nenhum valor secreto: so se o Claude Code esta instalado e se o token foi configurado.
+    return {
+        "ok": True,
+        "modo": CFG.modo,
+        "caixas": sorted(CFG.inbox_ids),
+        "claude_instalado": claude_instalado(),
+        "token_configurado": token_configurado(),
+    }
 
 
 @app.post("/webhooks/chatwoot/{segredo}")

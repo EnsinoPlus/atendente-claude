@@ -29,8 +29,11 @@ class Config:
     # Caixas de entrada atendidas (ids do Chatwoot). Vazio = nenhuma.
     inbox_ids: frozenset[int] = field(default_factory=frozenset)
 
-    modelo: str = "claude-opus-5-5"
-    esforco: str = "low"
+    # Modelo do Claude Code (alias como "sonnet" ou "opus", ou o nome completo do modelo).
+    modelo: str = "sonnet"
+    # Tempo maximo de uma consulta ao Claude Code e quantas rodam ao mesmo tempo.
+    claude_timeout_segundos: float = 120.0
+    claude_concorrencia: int = 1
 
     # Espera depois da ultima mensagem do cliente antes de responder,
     # para juntar mensagens enviadas em sequencia.
@@ -60,8 +63,9 @@ def carregar() -> Config:
         chatwoot_api_token=os.getenv("CHATWOOT_API_TOKEN", ""),
         webhook_segredo=os.getenv("WEBHOOK_SEGREDO", ""),
         inbox_ids=_lista_int(os.getenv("CHATWOOT_INBOX_IDS", "")),
-        modelo=os.getenv("CLAUDE_MODELO", "claude-opus-5-5"),
-        esforco=os.getenv("CLAUDE_ESFORCO", "low"),
+        modelo=os.getenv("CLAUDE_MODELO", "sonnet"),
+        claude_timeout_segundos=float(os.getenv("CLAUDE_TIMEOUT_SEGUNDOS", "120")),
+        claude_concorrencia=max(1, int(os.getenv("CLAUDE_CONCORRENCIA", "1"))),
         espera_segundos=float(os.getenv("ESPERA_SEGUNDOS", "20")),
         max_respostas_por_hora=int(os.getenv("MAX_RESPOSTAS_POR_HORA", "8")),
         historico_max_mensagens=int(os.getenv("HISTORICO_MAX_MENSAGENS", "40")),
