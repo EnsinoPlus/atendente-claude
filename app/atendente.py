@@ -125,5 +125,17 @@ class Atendente:
         await self.chatwoot.enviar(conversa_id, self.cfg.mensagem_transferencia, privada=False)
         await self.chatwoot.enviar(conversa_id, PREFIXO_HUMANO + (d.motivo or "não informado"), privada=True)
         if self.cfg.atendente_humano_id:
-            await self.chatwoot.atribuir(conversa_id, self.cfg.atendente_humano_id)
+            try:
+                await self.chatwoot.atribuir(conversa_id, self.cfg.atendente_humano_id)
+            except Exception as e:
+                # Nao deixa a falha passar em silencio nem impedir a conversa de ficar aberta para a equipe.
+                log.exception("conversa %s: falha ao atribuir ao agente %s", conversa_id, self.cfg.atendente_humano_id)
+                await self.chatwoot.enviar(
+                    conversa_id,
+                    f"🤖 Atendente EnsinoPlus: não consegui atribuir esta conversa ao agente "
+                    f"{self.cfg.atendente_humano_id} ({type(e).__name__}). Confira ATENDENTE_HUMANO_ID.",
+                    privada=True,
+                )
+        else:
+            log.warning("conversa %s transferida sem atribuicao: ATENDENTE_HUMANO_ID vazio", conversa_id)
         await self.chatwoot.abrir_para_equipe(conversa_id)

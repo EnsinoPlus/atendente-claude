@@ -75,7 +75,37 @@ class Chatwoot:
         )
 
     async def atribuir(self, conversa_id: int, agente_id: int) -> None:
-        await self._chamar("POST", f"/conversations/{conversa_id}/assignments", json={"assignee_id": agente_id})
+        """Atribui a conversa ao agente. Falha alto se o Chatwoot nao achar o agente:
+        com um id que nao existe na conta ele responde 200 com corpo vazio e deixa a conversa sem ninguem."""
+        dados = await self._chamar("POST", f"/conversations/{conversa_id}/assignments", json={"assignee_id": agente_id})
+        if not isinstance(dados, dict) or dados.get("id") != agente_id:
+            raise ValueError(f"o Chatwoot nao atribuiu a conversa {conversa_id} ao agente {agente_id} (id inexistente na conta?)")
+
+    async def conferir_agente(self, agente_id: int | None, inbox_ids) -> dict:
+        """Autoteste da transferencia: o agente existe na conta e participa das caixas atendidas?
+        Mostra so id e nome dos agentes (sem e-mail)."""
+        try:
+            agentes = await self._chamar("GET", "/agents")
+        except (httpx.HTTPError, ValueError) as e:
+            return {"ok": False, "erro": f"nao consegui listar os agentes: {type(e).__name__}"}
+        lista = [{"id": a.get("id"), "nome": a.get("name")} for a in agentes if isinstance(a, dict)]
+        if not agente_id:
+            return {"ok": False, "erro": "ATENDENTE_HUMANO_ID vazio", "agentes": lista}
+        achado = next((a for a in lista if a["id"] == agente_id), None)
+        if not achado:
+            return {"ok": False, "erro": f"agente {agente_id} nao existe na conta", "agentes": lista}
+        fora = []
+        for caixa in sorted(inbox_ids):
+            try:
+                membros = (await self._chamar("GET", f"/inbox_members/{caixa}")).get("payload") or []
+            except (httpx.HTTPError, ValueError):
+                continue
+            if agente_id not in {m.get("id") for m in membros if isinstance(m, dict)}:
+                fora.append(caixa)
+        r = {"ok": not fora, "id": agente_id, "nome": achado["nome"]}
+        if fora:
+            r["erro"] = f"agente nao e membro das caixas {fora}"
+        return r
 
     async def abrir_para_equipe(self, conversa_id: int) -> None:
         """Garante que a conversa fique 'aberta' (visivel na fila da equipe)."""

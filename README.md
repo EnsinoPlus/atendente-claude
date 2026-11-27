@@ -50,7 +50,9 @@ Almir (se `ATENDENTE_HUMANO_ID` estiver preenchido), deixa a conversa aberta e n
    - Domínio: o Easypanel gera um `*.n697dr.easypanel.host`; pode usar esse.
    - Recursos: 1 processo só (o Dockerfile já usa `--workers 1`); cada consulta abre um processo do Claude Code.
 4. Confira `https://<dominio>/saude` →
-   `{"ok": true, "modo": "sugestao", "caixas": [11], "claude_instalado": true, "token_configurado": true}`.
+   `{"ok": true, "modo": "sugestao", "caixas": [11], "atendente_humano_id": 3, "claude_instalado": true, ...}`.
+   Em `https://<dominio>/diagnostico/<WEBHOOK_SEGREDO>`, o item `atendente_humano` confere se o agente de
+   `ATENDENTE_HUMANO_ID` existe e está na caixa; se não, lista id e nome dos agentes da conta para escolher o certo.
 5. **Webhook no Chatwoot**: Configurações > Integrações > Webhooks > Adicionar
    - URL: `https://<dominio>/webhooks/chatwoot/<WEBHOOK_SEGREDO>`
    - Evento: **Mensagem criada** (só esse).

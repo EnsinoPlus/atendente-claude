@@ -50,8 +50,11 @@ class ChatwootFalso:
         self.abertas: list[int] = []
         self.atribuidas: list[tuple[int, int]] = []
         self.lidas = 0
+        self.falha_ao_atribuir = None
 
     async def atribuir(self, conversa_id, agente_id):
+        if self.falha_ao_atribuir:
+            raise self.falha_ao_atribuir
         self.atribuidas.append((conversa_id, agente_id))
 
     async def mensagens(self, conversa_id, limite):
@@ -125,6 +128,18 @@ class Publicacao(unittest.IsolatedAsyncioTestCase):
         a = atendente(cfg(modo="automatico"), [Mensagem("cliente", "Vocês têm curso presencial?")], d)
         await a.atender(7)
         self.assertEqual(a.chatwoot.atribuidas, [])
+        self.assertEqual(a.chatwoot.abertas, [7])
+
+    async def test_falha_ao_atribuir_vira_nota_e_conversa_fica_aberta(self):
+        d = Decisao("passar_para_humano", "", "pediu desconto")
+        a = atendente(cfg(modo="automatico", atendente_humano_id=99), [Mensagem("cliente", "Tem desconto?")], d)
+        a.chatwoot.falha_ao_atribuir = ValueError("agente inexistente")
+        with self.assertLogs("atendente", "ERROR"):
+            await a.atender(7)
+        self.assertEqual(a.chatwoot.enviadas[0], (7, MENSAGEM_TRANSFERENCIA, False))
+        cid, nota, privada = a.chatwoot.enviadas[2]
+        self.assertTrue(privada)
+        self.assertIn("não consegui atribuir", nota)
         self.assertEqual(a.chatwoot.abertas, [7])
 
     async def test_robo_nao_volta_a_falar_em_conversa_transferida(self):
@@ -466,6 +481,48 @@ class ChatwootTeste(unittest.IsolatedAsyncioTestCase):
         c = Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(transport=httpx.MockTransport(responde)))
         await c.enviar(5, "texto", privada=True)
         self.assertEqual(corpo, {"content": "texto", "message_type": "outgoing", "private": True})
+
+    async def test_atribuir_envia_assignee_id(self):
+        vistos = {}
+
+        def responde(req):
+            vistos["url"], vistos["corpo"] = str(req.url), json.loads(req.content)
+            return httpx.Response(200, json={"id": 3, "name": "Almir Sousa"})
+        c = Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(transport=httpx.MockTransport(responde)))
+        await c.atribuir(7, 3)
+        self.assertEqual(vistos["url"], "https://cw/api/v1/accounts/1/conversations/7/assignments")
+        self.assertEqual(vistos["corpo"], {"assignee_id": 3})
+
+    async def test_atribuir_com_id_inexistente_falha(self):
+        # O Chatwoot responde 200 com corpo "null" quando o agente nao existe na conta.
+        c = Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"null"))))
+        with self.assertRaises(ValueError):
+            await c.atribuir(7, 99)
+
+    def _cw_agentes(self, membros):
+        def responde(req):
+            if req.url.path.endswith("/agents"):
+                return httpx.Response(200, json=[{"id": 3, "name": "Almir Sousa", "email": "nao-deve-sair"},
+                                                  {"id": 5, "name": "Atendente EnsinoPlus"}])
+            return httpx.Response(200, json={"payload": [{"id": i} for i in membros]})
+        return Chatwoot("https://cw", 1, "tok", http=httpx.AsyncClient(transport=httpx.MockTransport(responde)))
+
+    async def test_conferir_agente_ok(self):
+        r = await self._cw_agentes([3, 5]).conferir_agente(3, {11})
+        self.assertEqual(r, {"ok": True, "id": 3, "nome": "Almir Sousa"})
+
+    async def test_conferir_agente_inexistente_lista_os_agentes_sem_email(self):
+        r = await self._cw_agentes([3]).conferir_agente(99, {11})
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["agentes"], [{"id": 3, "nome": "Almir Sousa"}, {"id": 5, "nome": "Atendente EnsinoPlus"}])
+        self.assertNotIn("nao-deve-sair", json.dumps(r))
+
+    async def test_conferir_agente_vazio_e_fora_da_caixa(self):
+        self.assertFalse((await self._cw_agentes([3]).conferir_agente(None, {11}))["ok"])
+        r = await self._cw_agentes([5]).conferir_agente(3, {11})
+        self.assertFalse(r["ok"])
+        self.assertIn("[11]", r["erro"])
 
 
 if __name__ == "__main__":

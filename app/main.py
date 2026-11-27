@@ -45,6 +45,8 @@ async def saude() -> dict:
         "ok": True,
         "modo": CFG.modo,
         "caixas": sorted(CFG.inbox_ids),
+        # Id (nao secreto) do agente que recebe as transferencias. null = a conversa nao e atribuida.
+        "atendente_humano_id": CFG.atendente_humano_id,
         "claude_instalado": claude_instalado(),
         "token_configurado": token_configurado(),
         "tamanhos": {
@@ -61,7 +63,11 @@ async def diagnostico(segredo: str):
     if not segredo_valido(segredo):
         return Response(status_code=403)
     a = atendente()
-    return {"chatwoot": await a.chatwoot.perfil(), "claude": await a.cerebro.testar()}
+    return {
+        "chatwoot": await a.chatwoot.perfil(),
+        "atendente_humano": await a.chatwoot.conferir_agente(CFG.atendente_humano_id, CFG.inbox_ids),
+        "claude": await a.cerebro.testar(),
+    }
 
 
 @app.post("/webhooks/chatwoot/{segredo}")
