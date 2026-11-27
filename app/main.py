@@ -1,8 +1,11 @@
 """Servidor HTTP: recebe o webhook do Chatwoot e entrega ao Atendente."""
 
+import hashlib
 import hmac
 import logging
 import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 
@@ -16,6 +19,21 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(
 log = logging.getLogger("atendente.main")
 
 CFG = config.carregar()
+
+
+def impressao_do_codigo(raiz: Path = Path(__file__).resolve().parent.parent) -> str:
+    """Versao do que esta rodando: hash curto de app/*.py e conhecimento/*.
+    O container nao tem o .git; o mesmo calculo feito no repositorio mostra se a versao e a esperada."""
+    h = hashlib.sha256()
+    conhecimento = [p for p in (raiz / "conhecimento").rglob("*") if p.is_file()]
+    for arq in sorted(list((raiz / "app").glob("*.py")) + conhecimento):
+        h.update(arq.relative_to(raiz).as_posix().encode())
+        h.update(arq.read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:10]
+
+
+VERSAO = impressao_do_codigo()
+INICIADO_EM = datetime.now(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y %H:%M")
 app = FastAPI(title="Atendente EnsinoPlus")
 _atendente: Atendente | None = None
 
@@ -43,10 +61,14 @@ async def saude() -> dict:
     # o segredo do webhook gerado tem 40 caracteres e e bem menor que os tokens.
     return {
         "ok": True,
+        # versao: compare com `python -c "from app.main import VERSAO; print(VERSAO)"` no repositorio.
+        "versao": VERSAO,
+        "iniciado_em": INICIADO_EM + " (Brasilia)",
         "modo": CFG.modo,
         "caixas": sorted(CFG.inbox_ids),
         # Id (nao secreto) do agente que recebe as transferencias. null = a conversa nao e atribuida.
         "atendente_humano_id": CFG.atendente_humano_id,
+        "mensagem_transferencia": CFG.mensagem_transferencia,
         "claude_instalado": claude_instalado(),
         "token_configurado": token_configurado(),
         "tamanhos": {

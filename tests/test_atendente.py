@@ -527,5 +527,24 @@ class ChatwootTeste(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[11]", r["erro"])
 
 
+class Versao(unittest.TestCase):
+    def test_impressao_ignora_quebra_de_linha_do_windows_e_muda_com_o_codigo(self):
+        import tempfile
+        from pathlib import Path
+        from app.main import impressao_do_codigo
+        with tempfile.TemporaryDirectory() as d:
+            raiz = Path(d)
+            (raiz / "app").mkdir()
+            (raiz / "conhecimento").mkdir()
+            (raiz / "app" / "a.py").write_bytes(b"x = 1\n")
+            (raiz / "conhecimento" / "b.md").write_bytes(b"texto\n")
+            v1 = impressao_do_codigo(raiz)
+            (raiz / "app" / "a.py").write_bytes(b"x = 1\r\n")
+            self.assertEqual(impressao_do_codigo(raiz), v1)
+            (raiz / "conhecimento" / "b.md").write_bytes(b"outro\n")
+            self.assertNotEqual(impressao_do_codigo(raiz), v1)
+            self.assertEqual(len(v1), 10)
+
+
 if __name__ == "__main__":
     unittest.main()
