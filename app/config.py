@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 MENSAGEM_TRANSFERENCIA = (
     "Para te dar uma resposta com total segurança, vou transferir seu atendimento "
-    "para o atendente Almir Sousa. Só um instante, por favor."
+    "para o atendente que estiver disponível. Só um instante, por favor."
 )
 
 

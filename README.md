@@ -10,7 +10,7 @@ Recebe as mensagens novas dos clientes no Chatwoot, consulta o Claude com a base
 **Regra principal:** o robô só responde o que está escrito na base de conhecimento ou na lista oficial de preços.
 Na menor dúvida, transfere. No modo automático, a transferência envia ao cliente uma **mensagem fixa**
 (nunca escrita pelo modelo): "Para te dar uma resposta com total segurança, vou transferir seu atendimento para o
-atendente Almir Sousa. Só um instante, por favor." Depois deixa nota interna com o motivo, atribui a conversa ao
+atendente que estiver disponível. Só um instante, por favor." Depois deixa nota interna com o motivo, atribui a conversa ao
 Almir (se `ATENDENTE_HUMANO_ID` estiver preenchido), deixa a conversa aberta e não volta a falar nela.
 
 ## Como funciona
@@ -24,7 +24,7 @@ Almir (se `ATENDENTE_HUMANO_ID` estiver preenchido), deixa a conversa aberta e n
 6. Consulta o **Claude Code** (CLI) em modo texto, **sem nenhuma ferramenta** (`--tools ""`), com a base de
    conhecimento como prompt de sistema e a conversa pela entrada padrão. Ele entra com o login da assinatura
    (`CLAUDE_CODE_OAUTH_TOKEN`). A resposta é um JSON; se algo falhar (login, tempo, formato), o robô **transfere
-   para o Almir Sousa** em vez de arriscar.
+   para a equipe** em vez de arriscar.
 7. Limite de `MAX_RESPOSTAS_POR_HORA` (8) por conversa, contra loops. Uma consulta por vez (`CLAUDE_CONCORRENCIA=1`).
 
 > **Aviso sobre o login da assinatura.** A página oficial de termos do Claude Code

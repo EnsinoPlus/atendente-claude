@@ -118,7 +118,8 @@ class Publicacao(unittest.IsolatedAsyncioTestCase):
         a = atendente(cfg(modo="automatico", atendente_humano_id=3), [Mensagem("cliente", "Tem desconto?")], d)
         await a.atender(7)
         self.assertEqual(a.chatwoot.enviadas[0], (7, MENSAGEM_TRANSFERENCIA, False))
-        self.assertIn("Almir Sousa", a.chatwoot.enviadas[0][1])
+        self.assertIn("atendente que estiver disponível", a.chatwoot.enviadas[0][1])
+        self.assertNotIn("Almir", a.chatwoot.enviadas[0][1])
         self.assertEqual(a.chatwoot.enviadas[1], (7, PREFIXO_HUMANO + "pediu desconto", True))
         self.assertEqual(a.chatwoot.atribuidas, [(7, 3)])
         self.assertEqual(a.chatwoot.abertas, [7])
@@ -213,10 +214,11 @@ class Cerebro(unittest.TestCase):
         self.assertEqual(interpretar("não é json").acao, "passar_para_humano")
         self.assertEqual(interpretar(json.dumps({"acao": "vender"})).acao, "passar_para_humano")
 
-    def test_base_de_conhecimento_exige_certeza_e_transfere_para_almir(self):
+    def test_base_de_conhecimento_exige_certeza_e_transfere_para_atendente_disponivel(self):
         from app.cerebro import CONHECIMENTO
         self.assertIn("100% de certeza", CONHECIMENTO)
-        self.assertIn("Almir Sousa", CONHECIMENTO)
+        self.assertIn("atendente que estiver disponível", CONHECIMENTO)
+        self.assertNotIn("Almir", CONHECIMENTO)
         self.assertIn("Seu nome é **Atendente EnsinoPlus**", CONHECIMENTO)
         self.assertIn("Não se apresente nem diga seu nome por conta própria", CONHECIMENTO)
         self.assertIn("Atendente EnsinoPlus", PREFIXO_SUGESTAO)
